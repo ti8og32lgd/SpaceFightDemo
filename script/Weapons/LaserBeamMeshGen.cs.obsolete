@@ -1,0 +1,182 @@
+﻿using System;
+using System.Collections.Generic;
+using Unity.Mathematics;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.Splines;
+
+
+// using static Unity.Mathematics.math;
+namespace script.Weapons
+{
+    // [RequireComponent(typeof(SplineContainer), typeof(MeshRenderer), typeof(MeshFilter))]
+    public class LaserBeamMeshGen 
+    {
+        // public Vector3 startPoint, endPoint;
+        //
+        // [SerializeField] private SplineContainer mSpline;
+        // private MeshCollider collider;
+        // public  int segmentsPerMeter;
+        //
+        // public float m_DefaultWidth;
+        // private Mesh mMesh;
+        // public Material mat;
+        //
+        // [SerializeField]
+        // float m_TextureScale = 1f;
+        //
+        // public float tagMagnitude = 1f;
+        // public Mesh Mesh
+        // {
+        //     get
+        //     {
+        //         if (mMesh != null)
+        //             return mMesh;
+        //
+        //         mMesh = new Mesh();
+        //         GetComponent<MeshRenderer>().sharedMaterial =mat;
+        //         return mMesh;
+        //     }
+        // }
+        // public Spline spline
+        // {
+        //     get
+        //     {
+        //         if (mSpline == null)
+        //             mSpline = GetComponent<SplineContainer>();
+        //         if (mSpline == null)
+        //         {
+        //             Debug.LogError("Cannot loft road mesh because Spline reference is null");
+        //             return null;
+        //         }
+        //         return mSpline.Spline;
+        //     }
+        // }
+        //
+        // private void Start()
+        // {
+        //     mSpline = GetComponent<SplineContainer>();
+        //     collider = GetComponent<MeshCollider>();
+        // }
+        //
+        // private void Update()
+        // {
+        //     // MoveTest();
+        //     // GenerateSpline();
+        //     // GenerateMesh();
+        // }
+        //
+        // private void MoveTest()
+        // {
+        //     transform.position=new Vector3(Mathf.Sin(Time.time),0,0);
+        // }
+
+        public static Spline GenerateLaserSpline(Vector3 startPoint,Vector3 endPoint)
+        {
+            Spline spline = new();
+            float tagMagnitude = 1f;
+            var _mag = tagMagnitude * Vector3.Distance(startPoint, endPoint);
+
+            
+            BezierKnot item1=new BezierKnot
+            {
+                Position = startPoint,
+                
+                Rotation = quaternion.identity,
+                TangentOut = new float3(0, 0, _mag)
+            };
+
+            BezierKnot item2=new BezierKnot
+            {
+                // transform.TransformPoint(endPoint);
+                // Position = transform.InverseTransformPoint(endPoint),
+                Position  =endPoint,
+                Rotation = quaternion.identity,
+                TangentIn = new float3(0, 0, -_mag)
+            };
+            item1.TangentOut = new float3(0, 0, _mag);
+            item2.TangentIn = new float3(0, 0, -_mag);
+
+
+            spline.Add(item1);
+            spline.Add(item2);
+            return spline;
+        }
+
+        public static Mesh GenerateCurveMesh(Spline spline,float width,float segmentsPerMeter)
+        {
+            if (spline == null || spline.Count < 2)
+            {
+                Debug.Log("spline == null || spline.Count < 2");
+                return null;
+            }
+
+            float length = spline.GetLength();
+
+            if (length < 1)
+            {
+                Debug.Log("length < 1");
+                return null;
+            }
+
+            var mesh = new Mesh();
+            mesh.Clear();
+
+                
+            int segments = (int)(segmentsPerMeter * length);
+            int vertexCount = segments * 2, triangleCount = (spline.Closed ? segments : segments - 1) * 6;
+
+            List<Vector3> m_Positions = new List<Vector3>();
+            List<Vector3> m_Normals = new List<Vector3>();
+            List<Vector2> m_Textures = new List<Vector2>();
+            List<int> m_Indices = new List<int>();
+                
+            m_Positions.Capacity = vertexCount;
+            m_Normals.Capacity = vertexCount;
+            m_Textures.Capacity = vertexCount;
+            m_Indices.Capacity = triangleCount;
+
+            for (int i = 0; i < segments; i++)
+            {
+                var index = i / (segments - 1f);
+                var control = SplineUtility.EvaluatePosition(spline, index);
+                var dir = SplineUtility.EvaluateTangent(spline, index);
+                var up = SplineUtility.EvaluateUpVector(spline, index);
+
+                // var scale = transform.lossyScale;
+                // var tangent = math.normalize(math.cross(up, dir)) * new float3(1f / scale.x, 1f / scale.y, 1f / scale.z);
+                var tangent = math.normalize(math.cross(up, dir)) ;
+
+                var w = width;
+                
+                m_Positions.Add(control - (tangent * w));
+                m_Positions.Add(control + (tangent * w));
+                m_Normals.Add(Vector3.up);
+                m_Normals.Add(Vector3.up);
+                m_Textures.Add(new Vector2(0f, index * 1f));
+                m_Textures.Add(new Vector2(1f, index * 1f));
+            }
+
+            for (int i = 0, n = 0; i < triangleCount; i += 6, n += 2)
+            {
+                m_Indices.Add((n + 2) % vertexCount);
+                m_Indices.Add((n + 1) % vertexCount);
+                m_Indices.Add((n + 0) % vertexCount);
+                m_Indices.Add((n + 2) % vertexCount);
+                m_Indices.Add((n + 3) % vertexCount);
+                m_Indices.Add((n + 1) % vertexCount);
+            }
+
+            mesh.SetVertices(m_Positions);
+            mesh.SetNormals(m_Normals);
+            mesh.SetUVs(0, m_Textures);
+            mesh.subMeshCount = 1;
+            mesh.SetIndices(m_Indices, MeshTopology.Triangles, 0);
+            mesh.UploadMeshData(false);
+
+            // GetComponent<MeshFilter>().sharedMesh = mMesh;
+            // collider.sharedMesh = mMesh;
+           return mesh;
+        }
+    }
+}
